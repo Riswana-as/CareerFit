@@ -13,9 +13,11 @@ class DatabaseManager {
   private pgliteInstance: PGlite | null = null;
   private pgPool: Pool | null = null;
   private isInitialized = false;
+  private isInitializing = false;
 
   async init(): Promise<void> {
-    if (this.isInitialized) return;
+    if (this.isInitialized || this.isInitializing) return;
+    this.isInitializing = true;
 
     const databaseUrl = process.env.DATABASE_URL;
 
@@ -68,14 +70,15 @@ class DatabaseManager {
       }
     }
 
+    this.isInitialized = true;
+    this.isInitializing = false;
+
     try {
       const { runMigrations } = await import("./migrations");
       await runMigrations();
     } catch (migErr: any) {
       console.warn("[DB] Automatic migration check:", migErr.message);
     }
-
-    this.isInitialized = true;
   }
 
   async query<T = any>(text: string, params: any[] = []): Promise<QueryResult<T>> {

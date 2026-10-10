@@ -25,6 +25,7 @@ uploads/
 *.zip
 *.pdf
 scratch/
+README.md
 
 # OS metadata
 .DS_Store

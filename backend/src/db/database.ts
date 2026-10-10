@@ -21,15 +21,24 @@ class DatabaseManager {
 
     if (databaseUrl && !databaseUrl.startsWith("pglite://")) {
       console.log("[DB] Connecting to external PostgreSQL database via Pool...");
-      this.pgPool = new Pool({ connectionString: databaseUrl });
+      const isLocalhost = databaseUrl.includes("localhost") || databaseUrl.includes("127.0.0.1");
+      this.pgPool = new Pool({
+        connectionString: databaseUrl,
+        ssl: isLocalhost ? false : { rejectUnauthorized: false }
+      });
       await this.pgPool.query("SELECT 1");
       console.log("[DB] External PostgreSQL connected.");
+    } else if (process.env.VERCEL) {
+      console.log("[DB] Running in-memory PGlite for Vercel...");
+      this.pgliteInstance = new PGlite();
+      await this.pgliteInstance.waitReady;
+      console.log("[DB] In-memory PGlite ready.");
     } else {
-      const dataDir = process.env.VERCEL
-        ? path.join(os.tmpdir(), "careerfit_pg")
-        : path.resolve(__dirname, "../../data/careerfit_pg");
+      const dataDir = path.resolve(__dirname, "../../data/careerfit_pg");
       if (!fs.existsSync(dataDir)) {
-        fs.mkdirSync(dataDir, { recursive: true });
+        try {
+          fs.mkdirSync(dataDir, { recursive: true });
+        } catch {}
       }
 
       // Self-healing: Clean stale postmaster.pid lock
@@ -48,13 +57,22 @@ class DatabaseManager {
       } catch (err: any) {
         console.warn("[DB] Recovering from unclean shutdown...", err.message);
         if (fs.existsSync(dataDir)) {
-          fs.rmSync(dataDir, { recursive: true, force: true });
-          fs.mkdirSync(dataDir, { recursive: true });
+          try {
+            fs.rmSync(dataDir, { recursive: true, force: true });
+            fs.mkdirSync(dataDir, { recursive: true });
+          } catch {}
         }
         this.pgliteInstance = new PGlite(dataDir);
         await this.pgliteInstance.waitReady;
         console.log("[DB] Embedded PostgreSQL recovered successfully.");
       }
+    }
+
+    try {
+      const { runMigrations } = await import("./migrations");
+      await runMigrations();
+    } catch (migErr: any) {
+      console.warn("[DB] Automatic migration check:", migErr.message);
     }
 
     this.isInitialized = true;

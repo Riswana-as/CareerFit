@@ -71,27 +71,41 @@ app.get("/download-code", (req, res) => {
   res.status(404).json({ error: "Code zip file not found." });
 });
 
+import { db } from "./db/database";
+
+// Ensure DB is initialized
+app.use(async (req, res, next) => {
+  try {
+    await db.init();
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
 // API Routes
 app.use("/api/v1", apiRoutes);
 
 // Error handling middleware
 app.use(errorHandler);
 
-// Initialize database and start server
+// Initialize database and start server (for local dev)
 async function startServer() {
   try {
-    await runMigrations();
+    await db.init();
     app.listen(PORT, () => {
       console.log(`[CareerFit AI Backend] Server running at http://localhost:${PORT}`);
       console.log(`[CareerFit AI Backend] REST API base: http://localhost:${PORT}/api/v1`);
     });
   } catch (error) {
     console.error("[CareerFit AI Backend] Startup failure:", error);
-    process.exit(1);
+    if (!process.env.VERCEL) {
+      process.exit(1);
+    }
   }
 }
 
-if (process.env.NODE_ENV !== "test") {
+if (process.env.NODE_ENV !== "test" && !process.env.VERCEL) {
   startServer();
 }
 

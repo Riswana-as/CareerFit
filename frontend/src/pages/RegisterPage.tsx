@@ -23,7 +23,13 @@ export const RegisterPage: React.FC = () => {
       login(res.data.token, res.data.user);
       navigate("/dashboard");
     } catch (err: any) {
-      setError(err.response?.data?.error || "Registration failed.");
+      const msg =
+        typeof err.response?.data?.error === "string"
+          ? err.response.data.error
+          : typeof err.response?.data?.message === "string"
+          ? err.response.data.message
+          : err.message || "Registration failed.";
+      setError(msg);
     } finally {
       setIsLoading(false);
     }

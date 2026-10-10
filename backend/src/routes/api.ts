@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import os from "os";
 import { AuthController } from "../controllers/authController";
 import { ResumeController } from "../controllers/resumeController";
 import { JobController } from "../controllers/jobController";
@@ -15,9 +16,16 @@ import { authLimiter } from "../middleware/rateLimiter";
 const router = Router();
 
 // Multer setup for secure resume uploads
-const uploadDir = path.resolve(__dirname, "../../uploads");
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
+const uploadDir = process.env.VERCEL
+  ? path.join(os.tmpdir(), "uploads")
+  : path.resolve(__dirname, "../../uploads");
+
+try {
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+} catch (err: any) {
+  console.warn("[Upload Dir Warning]", err.message);
 }
 
 const storage = multer.diskStorage({

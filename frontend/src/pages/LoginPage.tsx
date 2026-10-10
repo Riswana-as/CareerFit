@@ -22,7 +22,13 @@ export const LoginPage: React.FC = () => {
       login(res.data.token, res.data.user);
       navigate("/dashboard");
     } catch (err: any) {
-      setError(err.response?.data?.error || "Login failed. Check your credentials.");
+      const msg =
+        typeof err.response?.data?.error === "string"
+          ? err.response.data.error
+          : typeof err.response?.data?.message === "string"
+          ? err.response.data.message
+          : err.message || "Login failed. Check your credentials.";
+      setError(msg);
     } finally {
       setIsLoading(false);
     }

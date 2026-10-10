@@ -1,15 +1,13 @@
-import fs from "fs";
-import path from "path";
 import { db } from "./database";
 import { v4 as uuidv4 } from "uuid";
+import { SCHEMA_SQL } from "./schemaSql";
+
+let hasMigrated = false;
 
 export async function runMigrations(): Promise<void> {
+  if (hasMigrated) return;
   console.log("[DB] Running schema migrations...");
-  let schemaPath = path.resolve(__dirname, "schema.sql");
-  if (!fs.existsSync(schemaPath)) {
-    schemaPath = path.resolve(__dirname, "../../src/db/schema.sql");
-  }
-  const schemaSql = fs.readFileSync(schemaPath, "utf-8");
+  const schemaSql = SCHEMA_SQL;
 
   // Execute schema
   const statements = schemaSql
@@ -121,5 +119,6 @@ export async function runMigrations(): Promise<void> {
     );
   }
 
+  hasMigrated = true;
   console.log("[DB] Migrations and templates verified successfully.");
 }

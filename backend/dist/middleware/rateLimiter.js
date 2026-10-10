@@ -10,10 +10,12 @@ exports.authLimiter = (0, express_rate_limit_1.default)({
     max: 30, // 30 requests per window
     message: { error: "Too many authentication attempts, please try again after 15 minutes." },
     standardHeaders: true,
-    legacyHeaders: false
+    legacyHeaders: false,
+    validate: { trustProxy: false }
 });
 exports.apiLimiter = (0, express_rate_limit_1.default)({
     windowMs: 60 * 1000, // 1 minute
     max: 120, // 120 requests per minute
-    message: { error: "Too many requests. Please slow down." }
+    message: { error: "Too many requests. Please slow down." },
+    validate: { trustProxy: false }
 });

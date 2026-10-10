@@ -15,6 +15,15 @@ const rateLimiter_1 = require("./middleware/rateLimiter");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
+// Trust reverse proxy (Vercel, Cloudflare, AWS ALB)
+app.set("trust proxy", 1);
+// Health check & status endpoints (exempt from rate limiting & auth)
+app.get(["/health", "/api/health"], (req, res) => {
+    res.json({ status: "healthy", timestamp: new Date().toISOString() });
+});
+app.get(["/api", "/api/status", "/"], (req, res) => {
+    res.json({ message: "CareerFit AI API is running", version: "1.0.0" });
+});
 // Security & Middlewares
 app.use((0, helmet_1.default)());
 app.use((0, cors_1.default)({
@@ -41,13 +50,6 @@ app.use(express_1.default.json({ limit: "15mb" }));
 app.use(express_1.default.urlencoded({ extended: true, limit: "15mb" }));
 app.use((0, cookie_parser_1.default)());
 app.use("/api/", rateLimiter_1.apiLimiter);
-// Health check & status endpoints
-app.get(["/health", "/api/health"], (req, res) => {
-    res.json({ status: "healthy", timestamp: new Date().toISOString() });
-});
-app.get(["/api", "/api/status", "/"], (req, res) => {
-    res.json({ message: "CareerFit AI API is running", version: "1.0.0" });
-});
 // Direct Code Download endpoint
 app.get("/download-code", (req, res) => {
     const possiblePaths = [

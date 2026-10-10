@@ -3,38 +3,30 @@
   "services": {
     "backend": {
       "root": "backend",
-      "framework": "express",
-      "entrypoint": "index.js",
-      "installCommand": "npm install",
-      "buildCommand": "npm run build"
+      "framework": "express"
     },
     "frontend": {
       "root": "frontend",
-      "framework": "vite",
-      "installCommand": "npm install",
-      "buildCommand": "npm run build"
+      "framework": "vite"
     }
   },
   "rewrites": [
     {
       "source": "/api/(.*)",
       "destination": {
-        "service": "backend",
-        "path": "/api/$1"
+        "service": "backend"
       }
     },
     {
       "source": "/api",
       "destination": {
-        "service": "backend",
-        "path": "/api"
+        "service": "backend"
       }
     },
     {
       "source": "/download-code",
       "destination": {
-        "service": "backend",
-        "path": "/download-code"
+        "service": "backend"
       }
     },
     {

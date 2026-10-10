@@ -108,11 +108,8 @@ async function startServer() {
   }
 }
 
-if (require.main === module) {
+if (typeof require !== "undefined" && typeof module !== "undefined" && require.main === module) {
   startServer();
 }
 
-// Support both CommonJS and ES Module interop for Vercel Serverless
-module.exports = app;
-module.exports.default = app;
 export default app;

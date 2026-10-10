@@ -2,7 +2,7 @@
   "name": "careerfit-backend",
   "version": "1.0.0",
   "description": "CareerFit AI Backend API",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",

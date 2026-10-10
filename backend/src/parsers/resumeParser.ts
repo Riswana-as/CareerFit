@@ -615,7 +615,7 @@ export class ResumeParser {
       const isTitleCandidate =
         !isBullet &&
         isNotSentence &&
-        (hasDelimiter || (cleanLine.length < 90 && cleanLine === cleanLine.toUpperCase()));
+        (hasDelimiter || (cleanLine.length < 90 && (cleanLine === cleanLine.toUpperCase() || cleanLine.length < 50)));
 
       if (isTitleCandidate) {
         flushBullet();

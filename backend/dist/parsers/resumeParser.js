@@ -555,7 +555,7 @@ class ResumeParser {
             const isNotSentence = !cleanLine.endsWith(".") && !cleanLine.endsWith(",") && !actionVerbRegex.test(cleanLine);
             const isTitleCandidate = !isBullet &&
                 isNotSentence &&
-                (hasDelimiter || (cleanLine.length < 90 && cleanLine === cleanLine.toUpperCase()));
+                (hasDelimiter || (cleanLine.length < 90 && (cleanLine === cleanLine.toUpperCase() || cleanLine.length < 50)));
             if (isTitleCandidate) {
                 flushBullet();
                 if (currentProj)

@@ -43,7 +43,7 @@ export interface ProjectItem {
 export interface CertificationItem {
   id?: string;
   name: string;
-  issuingOrganization: string;
+  issuingOrganization?: string;
   issueDate?: string;
   expirationDate?: string;
   credentialUrl?: string;
@@ -60,8 +60,12 @@ export interface StructuredResume {
     databases?: string[];
     tools?: string[];
     cloudDevops?: string[];
+    coreSkills?: string[];
+    specialized?: string[];
+    domainSkills?: string[];
     other?: string[];
     rawList?: string[];
+    categories?: { title: string; skills: string[] }[];
   };
   experience: ExperienceItem[];
   education: EducationItem[];
@@ -150,6 +154,8 @@ export interface UnaddedItem {
   suggestedAction: string;
 }
 
+export type OptimizationMode = "standard" | "aggressive_keywords" | "executive" | "fresher";
+
 export interface TailoringResult {
   targetRole: string;
   atsScore: ATSScoreBreakdown;
@@ -158,6 +164,9 @@ export interface TailoringResult {
   tailoredResume: StructuredResume;
   originalResume: StructuredResume;
   suggestions: AISuggestion[];
+  keywords?: KeywordAnalysis;
+  requirementMatches?: RequirementMatch[];
+  optimizationMode?: OptimizationMode;
 }
 
 export type ApplicationStatus =

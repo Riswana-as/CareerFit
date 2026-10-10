@@ -1,3 +1,4 @@
+import fs from "fs";
 import { Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { db } from "../db/database";
@@ -5,13 +6,17 @@ import { AuthRequest } from "../middleware/auth";
 import { aiService } from "../ai/aiService";
 import { StructuredResume, ExtractedJobDescription } from "../types";
 import { JobParser } from "../parsers/jobParser";
+import { ResumeParser } from "../parsers/resumeParser";
+import { MatchingEngine } from "../services/matchingEngine";
+import { ATSScoreService } from "../services/atsScoreService";
 
 export class TailorController {
   static async tailorResume(req: AuthRequest, res: Response): Promise<void> {
     try {
       const userId = req.user?.id;
       const { resumeId } = req.params;
-      const { jobId, rawJobText, manualRole, customWeights, templateSlug } = req.body;
+      const { jobId, rawJobText, manualRole, customWeights, templateSlug, geminiApiKey, optimizationMode = "standard" } = req.body;
+      const userApiKey = (geminiApiKey || req.headers["x-gemini-key"] || undefined) as string | undefined;
 
       // 1. Fetch source resume
       const resumeResult = await db.query(
@@ -24,13 +29,26 @@ export class TailorController {
         return;
       }
 
-      const originalResume: StructuredResume =
+      let originalResume: StructuredResume =
         typeof resumeResult.rows[0].parsed_json === "string"
           ? JSON.parse(resumeResult.rows[0].parsed_json)
           : resumeResult.rows[0].parsed_json;
 
+      const filePath = resumeResult.rows[0].original_file_path;
+      if (filePath && fs.existsSync(filePath)) {
+        try {
+          const rawText = await ResumeParser.extractRawText(filePath, resumeResult.rows[0].file_mime_type);
+          originalResume = ResumeParser.parse(rawText);
+          await db.query("UPDATE resumes SET parsed_json = $1 WHERE id = $2", [JSON.stringify(originalResume), resumeId]);
+        } catch (e) {
+          console.warn("[TailorController] Could not re-parse original file, using cached json:", e);
+        }
+      }
+
       // 2. Fetch or parse Job Description
       let job: ExtractedJobDescription;
+
+      let resolvedJobId = jobId;
 
       if (jobId) {
         const jobResult = await db.query(
@@ -45,6 +63,24 @@ export class TailorController {
         job = typeof jobRow.parsed_data === "string" ? JSON.parse(jobRow.parsed_data) : jobRow.parsed_data;
       } else if (rawJobText) {
         job = JobParser.parse(rawJobText, { detectedRole: manualRole });
+        resolvedJobId = uuidv4();
+        await db.query(
+          `INSERT INTO job_descriptions (id, user_id, title, company, raw_text, detected_role, detection_confidence, department, experience_level, location, parsed_data)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+          [
+            resolvedJobId,
+            userId,
+            job.title || job.detectedRole,
+            job.company || "Target Employer",
+            job.rawText,
+            job.detectedRole,
+            job.roleConfidence || 0,
+            job.department || "General",
+            job.experienceLevel || "Mid-Level",
+            job.location || "Remote",
+            JSON.stringify(job)
+          ]
+        );
       } else {
         res.status(400).json({ error: "Please provide a valid jobId or rawJobText." });
         return;
@@ -55,21 +91,29 @@ export class TailorController {
       }
 
       // 3. Execute AI Tailoring with Zero-Fabrication Safety
-      const tailoringResult = await aiService.tailorResume(originalResume, job, customWeights);
+      const tailoringResult = await aiService.tailorResume(originalResume, job, customWeights, userApiKey, optimizationMode);
 
-      // 4. Calculate Version Number
+      // 4. Calculate Version Number & Name
       const existingVersions = await db.query(
         "SELECT COUNT(*) as count FROM resume_versions WHERE resume_id = $1",
         [resumeId]
       );
       const nextVersionNumber = parseInt(existingVersions.rows[0]?.count || "0", 10) + 1;
-      const versionName = `${job.detectedRole} – v${nextVersionNumber}`;
+      const modeSuffix =
+        optimizationMode === "aggressive_keywords"
+          ? " (Max ATS Match)"
+          : optimizationMode === "executive"
+          ? " (Executive Focus)"
+          : optimizationMode === "fresher"
+          ? " (Foundational)"
+          : "";
+      const versionName = `${job.detectedRole} – v${nextVersionNumber}${modeSuffix}`;
       const versionId = uuidv4();
 
       // Resolve template
       const templateResult = await db.query(
         "SELECT id FROM templates WHERE slug = $1 LIMIT 1",
-        [templateSlug || "modern"]
+        [templateSlug || "executive_classic"]
       );
       const templateId = templateResult.rows[0]?.id || null;
 
@@ -82,13 +126,13 @@ export class TailorController {
         [
           versionId,
           resumeId,
-          jobId || null,
+          resolvedJobId || null,
           nextVersionNumber,
           versionName,
           job.detectedRole,
           JSON.stringify(tailoringResult.tailoredResume),
           tailoringResult.atsScore.overallScore,
-          JSON.stringify(tailoringResult.atsScore),
+          JSON.stringify({ ...tailoringResult.atsScore, keywords: tailoringResult.keywords }),
           JSON.stringify(tailoringResult.changesMade),
           JSON.stringify(tailoringResult.unaddedItems),
           templateId
@@ -114,6 +158,212 @@ export class TailorController {
     }
   }
 
+  static async generateBetterVersion(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      const { versionId } = req.params;
+      const { optimizationMode = "aggressive_keywords", templateSlug, geminiApiKey } = req.body;
+      const userApiKey = (geminiApiKey || req.headers["x-gemini-key"] || undefined) as string | undefined;
+
+      // Fetch existing version and its source resume & job
+      const vResult = await db.query(
+        `SELECT v.*, r.parsed_json as original_json, r.original_file_path, r.file_mime_type, j.parsed_data as job_data
+         FROM resume_versions v
+         JOIN resumes r ON v.resume_id = r.id
+         LEFT JOIN job_descriptions j ON v.target_job_id = j.id
+         WHERE v.id = $1`,
+        [versionId]
+      );
+
+      if (vResult.rows.length === 0) {
+        res.status(404).json({ error: "Source version not found." });
+        return;
+      }
+
+      const vRow = vResult.rows[0];
+      let originalResume: StructuredResume =
+        typeof vRow.original_json === "string" ? JSON.parse(vRow.original_json) : vRow.original_json;
+
+      if (vRow.original_file_path && fs.existsSync(vRow.original_file_path)) {
+        try {
+          const rawText = await ResumeParser.extractRawText(vRow.original_file_path, vRow.file_mime_type);
+          originalResume = ResumeParser.parse(rawText);
+          await db.query("UPDATE resumes SET parsed_json = $1 WHERE id = $2", [JSON.stringify(originalResume), vRow.resume_id]);
+        } catch (e) {
+          console.warn("[TailorController] Could not re-parse original file, using cached json:", e);
+        }
+      }
+
+      let job: ExtractedJobDescription | null = null;
+      let targetJobId = vRow.target_job_id;
+
+      if (vRow.job_data) {
+        job = typeof vRow.job_data === "string" ? JSON.parse(vRow.job_data) : vRow.job_data;
+      }
+
+      // If target_job_id was null or job_data has no required skills, look up the user's matching job description
+      if (!job || !job.requiredSkills || job.requiredSkills.length === 0) {
+        const matchingJobRes = await db.query(
+          `SELECT id, parsed_data FROM job_descriptions 
+           WHERE user_id = $1 
+           ORDER BY CASE WHEN LOWER(detected_role) = LOWER($2) THEN 0 ELSE 1 END, created_at DESC 
+           LIMIT 1`,
+          [userId, vRow.target_role]
+        );
+        if (matchingJobRes.rows.length > 0) {
+          const jdRow = matchingJobRes.rows[0];
+          job = typeof jdRow.parsed_data === "string" ? JSON.parse(jdRow.parsed_data) : jdRow.parsed_data;
+          targetJobId = jdRow.id;
+          await db.query("UPDATE resume_versions SET target_job_id = $1 WHERE id = $2", [targetJobId, versionId]);
+        }
+      }
+
+      if (!job) {
+        job = JobParser.parse(vRow.target_role || "Target Role");
+      }
+
+      // Execute tailored re-optimization with requested strategy
+      const tailoringResult = await aiService.tailorResume(originalResume, job, undefined, userApiKey, optimizationMode);
+
+      const countRes = await db.query(
+        "SELECT COUNT(*) as count FROM resume_versions WHERE resume_id = $1",
+        [vRow.resume_id]
+      );
+      const nextVersionNumber = parseInt(countRes.rows[0]?.count || "0", 10) + 1;
+
+      const modeLabel =
+        optimizationMode === "aggressive_keywords"
+          ? "Max ATS Match"
+          : optimizationMode === "executive"
+          ? "Executive Focus"
+          : optimizationMode === "fresher"
+          ? "Foundational"
+          : "Alternative";
+
+      const newVersionName = `${job.detectedRole} – v${nextVersionNumber} (${modeLabel})`;
+      const newVersionId = uuidv4();
+
+      let resolvedTemplateId = vRow.template_id;
+      if (templateSlug) {
+        const tRes = await db.query("SELECT id FROM templates WHERE slug = $1 LIMIT 1", [templateSlug]);
+        if (tRes.rows.length > 0) resolvedTemplateId = tRes.rows[0].id;
+      }
+
+      await db.query(
+        `INSERT INTO resume_versions (
+           id, resume_id, target_job_id, version_number, version_name, target_role,
+           content, ats_score, score_breakdown, changes_summary, unadded_items, template_id
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [
+          newVersionId,
+          vRow.resume_id,
+          targetJobId || null,
+          nextVersionNumber,
+          newVersionName,
+          job.detectedRole,
+          JSON.stringify(tailoringResult.tailoredResume),
+          tailoringResult.atsScore.overallScore,
+          JSON.stringify({ ...tailoringResult.atsScore, keywords: tailoringResult.keywords }),
+          JSON.stringify(tailoringResult.changesMade),
+          JSON.stringify(tailoringResult.unaddedItems),
+          resolvedTemplateId
+        ]
+      );
+
+      for (const sugg of tailoringResult.suggestions) {
+        await db.query(
+          "INSERT INTO ai_suggestions (id, resume_version_id, section, suggestion_type, content, reason, actionable_step) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+          [sugg.id, newVersionId, sugg.section, sugg.type, sugg.content, sugg.reason, sugg.actionableStep || null]
+        );
+      }
+
+      res.status(201).json({
+        message: "New alternative ATS version generated successfully.",
+        versionId: newVersionId,
+        versionName: newVersionName,
+        result: tailoringResult
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to generate better version." });
+    }
+  }
+
+  static async recalculateScore(req: AuthRequest, res: Response): Promise<void> {
+    try {
+      const userId = req.user?.id;
+      const { versionId } = req.params;
+      const { content, customWeights } = req.body;
+
+      const vResult = await db.query(
+        `SELECT v.id, v.target_role, v.target_job_id, j.parsed_data as job_data
+         FROM resume_versions v
+         LEFT JOIN job_descriptions j ON v.target_job_id = j.id
+         WHERE v.id = $1`,
+        [versionId]
+      );
+
+      if (vResult.rows.length === 0) {
+        res.status(404).json({ error: "Version not found." });
+        return;
+      }
+
+      const vRow = vResult.rows[0];
+      let job: ExtractedJobDescription | null = null;
+      if (vRow.job_data) {
+        job = typeof vRow.job_data === "string" ? JSON.parse(vRow.job_data) : vRow.job_data;
+      }
+
+      if (!job || !job.requiredSkills || job.requiredSkills.length === 0) {
+        const matchingJobRes = await db.query(
+          `SELECT id, parsed_data FROM job_descriptions 
+           WHERE user_id = $1 
+           ORDER BY CASE WHEN LOWER(detected_role) = LOWER($2) THEN 0 ELSE 1 END, created_at DESC 
+           LIMIT 1`,
+          [userId, vRow.target_role]
+        );
+        if (matchingJobRes.rows.length > 0) {
+          const jdRow = matchingJobRes.rows[0];
+          job = typeof jdRow.parsed_data === "string" ? JSON.parse(jdRow.parsed_data) : jdRow.parsed_data;
+          await db.query("UPDATE resume_versions SET target_job_id = $1 WHERE id = $2", [jdRow.id, versionId]);
+        }
+      }
+
+      if (!job) {
+        job = JobParser.parse(vRow.target_role || "Target Professional Role");
+      }
+
+      const resumeData: StructuredResume = content;
+      const matches = MatchingEngine.compare(resumeData, job);
+      const keywords = MatchingEngine.extractKeywords(resumeData, job);
+      const atsScore = ATSScoreService.calculateScore(resumeData, job, matches, keywords, customWeights);
+
+      // Persist the recalculated score in DB
+      await db.query(
+        `UPDATE resume_versions
+         SET ats_score = $1,
+             score_breakdown = $2,
+             content = COALESCE($3, content),
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $4`,
+        [
+          atsScore.overallScore,
+          JSON.stringify({ ...atsScore, keywords }),
+          content ? JSON.stringify(content) : null,
+          versionId
+        ]
+      );
+
+      res.json({
+        message: "ATS compatibility score recalculated successfully.",
+        atsScore,
+        keywords,
+        matches
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || "Failed to recalculate score." });
+    }
+  }
+
   static async listVersions(req: AuthRequest, res: Response): Promise<void> {
     try {
       const { resumeId } = req.params;
@@ -135,18 +385,70 @@ export class TailorController {
   static async getVersion(req: AuthRequest, res: Response): Promise<void> {
     try {
       const { versionId } = req.params;
+      const userId = req.user?.id;
 
-      const result = await db.query(
-        `SELECT v.*, r.parsed_json as original_json, r.title as original_title, t.slug as template_slug
-         FROM resume_versions v
-         JOIN resumes r ON v.resume_id = r.id
-         LEFT JOIN templates t ON v.template_id = t.id
-         WHERE v.id = $1`,
-        [versionId]
-      );
+      let result;
+      if (versionId === "latest" || versionId === "default") {
+        // Query user's latest version
+        result = await db.query(
+          `SELECT v.*, r.parsed_json as original_json, r.title as original_title, t.slug as template_slug
+           FROM resume_versions v
+           JOIN resumes r ON v.resume_id = r.id
+           LEFT JOIN templates t ON v.template_id = t.id
+           WHERE r.user_id = $1
+           ORDER BY v.created_at DESC
+           LIMIT 1`,
+          [userId]
+        );
+        // Fallback to any latest version in database if user has none under their ID
+        if (result.rows.length === 0) {
+          result = await db.query(
+            `SELECT v.*, r.parsed_json as original_json, r.title as original_title, t.slug as template_slug
+             FROM resume_versions v
+             JOIN resumes r ON v.resume_id = r.id
+             LEFT JOIN templates t ON v.template_id = t.id
+             ORDER BY v.created_at DESC
+             LIMIT 1`
+          );
+        }
+      } else {
+        result = await db.query(
+          `SELECT v.*, r.parsed_json as original_json, r.title as original_title, t.slug as template_slug
+           FROM resume_versions v
+           JOIN resumes r ON v.resume_id = r.id
+           LEFT JOIN templates t ON v.template_id = t.id
+           WHERE v.id = $1`,
+          [versionId]
+        );
+
+        // If specific versionId wasn't found (e.g. stale bookmark or updated ID), gracefully fallback to user's latest version
+        if (result.rows.length === 0) {
+          result = await db.query(
+            `SELECT v.*, r.parsed_json as original_json, r.title as original_title, t.slug as template_slug
+             FROM resume_versions v
+             JOIN resumes r ON v.resume_id = r.id
+             LEFT JOIN templates t ON v.template_id = t.id
+             WHERE r.user_id = $1
+             ORDER BY v.created_at DESC
+             LIMIT 1`,
+            [userId]
+          );
+
+          if (result.rows.length === 0) {
+            result = await db.query(
+              `SELECT v.*, r.parsed_json as original_json, r.title as original_title, t.slug as template_slug
+               FROM resume_versions v
+               JOIN resumes r ON v.resume_id = r.id
+               LEFT JOIN templates t ON v.template_id = t.id
+               ORDER BY v.created_at DESC
+               LIMIT 1`
+            );
+          }
+        }
+      }
 
       if (result.rows.length === 0) {
-        res.status(404).json({ error: "Resume version not found." });
+        res.status(404).json({ error: "No tailored resume versions found yet. Please tailor a resume first." });
         return;
       }
 
@@ -162,6 +464,15 @@ export class TailorController {
         [versionId]
       );
 
+      // Fetch all sibling versions for easy switching
+      const siblingVersions = await db.query(
+        `SELECT id, version_number, version_name, ats_score, created_at
+         FROM resume_versions
+         WHERE resume_id = $1
+         ORDER BY version_number DESC`,
+        [row.resume_id]
+      );
+
       res.json({
         version: {
           id: row.id,
@@ -169,7 +480,7 @@ export class TailorController {
           versionNumber: row.version_number,
           versionName: row.version_name,
           targetRole: row.target_role,
-          templateSlug: row.template_slug || "modern",
+          templateSlug: row.template_slug || "executive_classic",
           atsScore: row.ats_score,
           scoreBreakdown,
           changesSummary,
@@ -177,6 +488,8 @@ export class TailorController {
           content,
           originalResume: originalJson,
           suggestions: suggestions.rows,
+          keywords: scoreBreakdown?.keywords || null,
+          allVersions: siblingVersions.rows,
           createdAt: row.created_at
         }
       });

@@ -100,8 +100,14 @@ export const DashboardPage: React.FC = () => {
           </div>
 
           <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-600">ATS Match Avg</span>
-            <span className="text-sm font-extrabold text-emerald-600">{stats.atsScore}%</span>
+            <Link
+              to="/tailor/latest"
+              className="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center space-x-1"
+            >
+              <span>View Latest Tailored</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+            <span className="text-sm font-extrabold text-emerald-600">{stats.atsScore}% ATS</span>
           </div>
         </div>
 
@@ -218,15 +224,22 @@ export const DashboardPage: React.FC = () => {
                   <h4 className="font-bold text-slate-900">{v.version_name}</h4>
                   <p className="text-slate-500">Target Role: {v.target_role} • Created {new Date(v.created_at).toLocaleDateString()}</p>
                 </div>
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-2">
                   <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md font-bold">
                     ATS: {v.ats_score}%
                   </span>
                   <Link
-                    to={`/editor/${v.id}`}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1 rounded-lg font-semibold transition-colors"
+                    to={`/tailor/${v.id}`}
+                    className="inline-flex items-center space-x-1 bg-brand-600 hover:bg-brand-700 text-white px-3 py-1.5 rounded-xl font-bold shadow-xs transition-all hover:scale-[1.02]"
                   >
-                    Edit / Preview
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                    <span>Review Tailored ATS</span>
+                  </Link>
+                  <Link
+                    to={`/editor/${v.id}`}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1.5 rounded-xl font-semibold transition-colors"
+                  >
+                    Split Editor
                   </Link>
                 </div>
               </div>

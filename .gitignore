@@ -1,9 +1,31 @@
-﻿node_modules/
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Production build outputs
 dist/
+**/dist/
 build/
+**/build/
+
+# Environment and sensitive keys
 .env
+**/.env
+.env.local
+**/.env.local
+
+# Database runtime & uploads
+backend/data/
+**/careerfit_pg/
 uploads/
-data/careerfit_pg/
+**/uploads/
+
+# Temporary and export files
 *.log
+*.zip
+*.pdf
+scratch/
+
+# OS metadata
 .DS_Store
 Thumbs.db

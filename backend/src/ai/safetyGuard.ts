@@ -33,17 +33,37 @@ export class SafetyGuard {
       databases: this.filterGenuine(tailored.skills.databases || [], originalTokens),
       tools: this.filterGenuine(tailored.skills.tools || [], originalTokens),
       cloudDevops: this.filterGenuine(tailored.skills.cloudDevops || [], originalTokens),
+      coreSkills: this.filterGenuine(tailored.skills.coreSkills || [], originalTokens),
+      specialized: this.filterGenuine(tailored.skills.specialized || [], originalTokens),
+      domainSkills: this.filterGenuine(tailored.skills.domainSkills || [], originalTokens),
       other: this.filterGenuine(tailored.skills.other || [], originalTokens),
-      rawList: this.filterGenuine(tailored.skills.rawList || [], originalTokens)
+      rawList: this.filterGenuine(tailored.skills.rawList || [], originalTokens),
+      categories: tailored.skills.categories?.map((cat) => ({
+        title: cat.title,
+        skills: this.filterGenuine(cat.skills, originalTokens)
+      }))
     };
 
     // Check required job skills that are absent from candidate profile
     const allOriginalSkills = this.getAllSkillsLower(original);
     for (const reqSkill of [...job.requiredSkills, ...job.preferredSkills]) {
       const lowerReq = reqSkill.toLowerCase();
-      const candidateHasSkill = allOriginalSkills.some(
-        (orig) => orig.includes(lowerReq) || lowerReq.includes(orig)
-      );
+      const reqBase = lowerReq.replace(/\s*\([^)]+\)/g, "").trim();
+      const reqAmpersand = reqBase.replace(/\band\b/g, "&");
+      const parenMatch = reqSkill.match(/\(([^)]+)\)/);
+      const reqAcronym = parenMatch ? parenMatch[1].toLowerCase() : null;
+
+      const candidateHasSkill = allOriginalSkills.some((orig) => {
+        const origBase = orig.replace(/\s*\([^)]+\)/g, "").trim();
+        const origAmpersand = origBase.replace(/\band\b/g, "&");
+        const origParen = orig.match(/\(([^)]+)\)/);
+        const origAcronym = origParen ? origParen[1].toLowerCase() : null;
+
+        if (orig.includes(lowerReq) || lowerReq.includes(orig)) return true;
+        if (origAmpersand.includes(reqAmpersand) || reqAmpersand.includes(origAmpersand)) return true;
+        if (reqAcronym && (orig.includes(reqAcronym) || origAcronym === reqAcronym)) return true;
+        return false;
+      });
 
       if (!candidateHasSkill) {
         unadded.push({
@@ -93,14 +113,21 @@ export class SafetyGuard {
   }
 
   private static getAllSkillsLower(resume: StructuredResume): string[] {
+    const categorySkills = (resume.skills.categories || []).flatMap((c) => c.skills || []);
+    const certSkills = (resume.certifications || []).map((c) => c.name);
     const skills = [
       ...(resume.skills.languages || []),
       ...(resume.skills.frontend || []),
       ...(resume.skills.backend || []),
       ...(resume.skills.databases || []),
       ...(resume.skills.tools || []),
+      ...(resume.skills.coreSkills || []),
+      ...(resume.skills.specialized || []),
+      ...(resume.skills.domainSkills || []),
       ...(resume.skills.other || []),
-      ...(resume.skills.rawList || [])
+      ...(resume.skills.rawList || []),
+      ...categorySkills,
+      ...certSkills
     ];
     return skills.map((s) => s.toLowerCase());
   }

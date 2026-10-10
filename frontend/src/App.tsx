@@ -78,6 +78,14 @@ export const App: React.FC = () => {
             }
           />
           <Route
+            path="/tailor"
+            element={
+              <ProtectedRoute>
+                <Navigate to="/tailor/latest" replace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/tailor/:versionId"
             element={
               <ProtectedRoute>

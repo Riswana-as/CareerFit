@@ -6,7 +6,8 @@ import {
   ResumeVersionSummary,
   JobApplication,
   ExtractedJobDescription,
-  ATSScoreBreakdown
+  ATSScoreBreakdown,
+  KeywordAnalysis
 } from "../types";
 
 const api = axios.create({
@@ -18,6 +19,10 @@ api.interceptors.request.use((config) => {
   const token = localStorage.getItem("careerfit_token");
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  const geminiKey = localStorage.getItem("careerfit_gemini_api_key");
+  if (geminiKey) {
+    config.headers["x-gemini-key"] = geminiKey;
   }
   return config;
 });
@@ -67,6 +72,7 @@ export const apiClient = {
       manualRole?: string;
       customWeights?: ATSScoreBreakdown["scoringWeights"];
       templateSlug?: string;
+      geminiApiKey?: string;
     }
   ) =>
     api.post<{
@@ -84,12 +90,32 @@ export const apiClient = {
     versionId: string,
     data: { content?: StructuredResume; templateSlug?: string; versionName?: string }
   ) => api.put("/versions/" + versionId, data),
+  recalculateScore: (
+    versionId: string,
+    data: { content: StructuredResume; customWeights?: ATSScoreBreakdown["scoringWeights"] }
+  ) =>
+    api.post<{
+      message: string;
+      atsScore: ATSScoreBreakdown;
+      keywords: KeywordAnalysis;
+      matches: any[];
+    }>("/versions/" + versionId + "/recalculate-score", data),
+  generateBetterVersion: (
+    versionId: string,
+    data: { optimizationMode?: string; templateSlug?: string; geminiApiKey?: string }
+  ) =>
+    api.post<{
+      message: string;
+      versionId: string;
+      versionName: string;
+      result: TailoringResult;
+    }>("/versions/" + versionId + "/generate-better", data),
 
   // Export URL helpers
-  getPdfExportUrl: (resumeId: string, versionId?: string, template: string = "modern") =>
+  getPdfExportUrl: (resumeId: string, versionId?: string, template: string = "executive_classic") =>
     `/api/v1/resumes/${resumeId}/export/pdf?${versionId ? `versionId=${versionId}&` : ""}template=${template}`,
-  getDocxExportUrl: (resumeId: string, versionId?: string) =>
-    `/api/v1/resumes/${resumeId}/export/docx${versionId ? `?versionId=${versionId}` : ""}`,
+  getDocxExportUrl: (resumeId: string, versionId?: string, template: string = "executive_classic") =>
+    `/api/v1/resumes/${resumeId}/export/docx?${versionId ? `versionId=${versionId}&` : ""}template=${template}`,
 
   // Applications
   listApplications: () =>

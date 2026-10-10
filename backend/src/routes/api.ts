@@ -68,6 +68,8 @@ router.post("/resumes/:resumeId/tailor", authenticate, TailorController.tailorRe
 router.get("/resumes/:resumeId/versions", authenticate, TailorController.listVersions);
 router.get("/versions/:versionId", authenticate, TailorController.getVersion);
 router.put("/versions/:versionId", authenticate, TailorController.updateVersion);
+router.post("/versions/:versionId/recalculate-score", authenticate, TailorController.recalculateScore);
+router.post("/versions/:versionId/generate-better", authenticate, TailorController.generateBetterVersion);
 
 // Export Routes
 router.get("/resumes/:id/export/pdf", authenticate, ExportController.exportPdf);

@@ -98,5 +98,28 @@ export async function runMigrations(): Promise<void> {
     }
   }
 
+  // Ensure Executive Classic template exists
+  const hasExec = await db.query("SELECT id FROM templates WHERE slug = 'executive_classic'");
+  if (hasExec.rows.length === 0) {
+    const execTemplate = {
+      id: uuidv4(),
+      name: "Executive Classic (Harvard ATS)",
+      slug: "executive_classic",
+      description: "Classic executive serif template with centered header, horizontal section dividers, right-aligned dates, and balanced two-column skills. High ATS pass rate.",
+      layout_config: JSON.stringify({
+        fontFamily: "Georgia, Times New Roman, serif",
+        fontSize: 10,
+        lineSpacing: 1.35,
+        margin: 0.75,
+        headerStyle: "centered_serif",
+        accentColor: "#000000"
+      })
+    };
+    await db.query(
+      "INSERT INTO templates (id, name, slug, description, layout_config) VALUES ($1, $2, $3, $4, $5)",
+      [execTemplate.id, execTemplate.name, execTemplate.slug, execTemplate.description, execTemplate.layout_config]
+    );
+  }
+
   console.log("[DB] Migrations and templates verified successfully.");
 }

@@ -21,7 +21,7 @@ app.use(
     origin: process.env.FRONTEND_URL || "http://localhost:5173",
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"]
+    allowedHeaders: ["Content-Type", "Authorization", "x-gemini-key"]
   })
 );
 app.use(express.json({ limit: "15mb" }));
@@ -32,6 +32,24 @@ app.use("/api/", apiLimiter);
 // Health check
 app.get("/health", (req, res) => {
   res.json({ status: "healthy", timestamp: new Date().toISOString() });
+});
+
+// Direct Code Download endpoint
+app.get("/download-code", (req, res) => {
+  const possiblePaths = [
+    path.resolve(__dirname, "../careerfit-ai.zip"),
+    path.resolve(__dirname, "../../careerfit-ai.zip"),
+    "C:\\Users\\USER\\Desktop\\careerfit-ai.zip",
+    "C:\\Users\\USER\\Downloads\\careerfit-ai.zip"
+  ];
+  for (const p of possiblePaths) {
+    if (require("fs").existsSync(p)) {
+      res.setHeader("Content-Disposition", 'attachment; filename="careerfit-ai.zip"');
+      res.setHeader("Content-Type", "application/zip");
+      return res.sendFile(p);
+    }
+  }
+  res.status(404).json({ error: "Code zip file not found." });
 });
 
 // API Routes

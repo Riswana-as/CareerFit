@@ -30,8 +30,8 @@ export class ATSScoreService {
       Math.round((keywords.existingKeywords.length / totalKeywords) * 100)
     );
 
-    // 2. Technical skills score
-    const skillMatches = matches.filter((m) => m.category === "technical_skill");
+    // 2. Technical / Functional skills score
+    const skillMatches = matches.filter((m) => m.category === "technical_skill" || m.category === "preferred_skill");
     let skillScore = 0;
     if (skillMatches.length > 0) {
       const strongCount = skillMatches.filter((m) => m.status === "strong").length;
@@ -45,23 +45,62 @@ export class ATSScoreService {
     }
 
     // 3. Experience relevance score
+    const roleTokens = job.detectedRole.toLowerCase().split(/\s+/).filter((t) => t.length > 3);
     const roleInTitle = resume.experience.some((e) =>
-      e.jobTitle.toLowerCase().includes(job.detectedRole.toLowerCase().split(" ")[0])
+      roleTokens.some((token) => e.jobTitle.toLowerCase().includes(token))
     );
     const hasMultipleRoles = resume.experience.length >= 2;
-    let experienceRelevance = 70;
-    if (roleInTitle) experienceRelevance += 20;
+    let experienceRelevance = 65;
+    if (roleInTitle) experienceRelevance += 15;
     if (hasMultipleRoles) experienceRelevance += 10;
+
+    const expBullets = resume.experience.flatMap((e) => e.responsibilities || []);
+    const matchingBulletsCount = expBullets.filter((b) => {
+      const bLower = b.toLowerCase();
+      return (
+        job.requiredSkills.some((s) => bLower.includes(s.toLowerCase())) ||
+        job.responsibilities.some((r) => {
+          const rTokens = r.toLowerCase().split(/\s+/).filter((w) => w.length > 4);
+          return rTokens.filter((token) => bLower.includes(token)).length >= 2;
+        })
+      );
+    }).length;
+
+    if (matchingBulletsCount >= 2) experienceRelevance += 5;
+    if (matchingBulletsCount >= 4) experienceRelevance += 5;
     experienceRelevance = Math.min(100, experienceRelevance);
 
-    // 4. Education score
+    // 4. Universal Education alignment score
     const hasEducation = resume.education.length > 0;
-    const degreeMentionsCS = resume.education.some(
-      (e) =>
-        /computer|software|engineering|technology|information/i.test(e.degree) ||
-        /computer|software|engineering/i.test(e.fieldOfStudy || "")
-    );
-    const educationScore = degreeMentionsCS ? 100 : hasEducation ? 85 : 60;
+    let educationScore = 60;
+    if (hasEducation) {
+      // Check if candidate's degree aligns with job's field/department
+      const dept = (job.department || "").toLowerCase();
+      const isAligned = resume.education.some((edu) => {
+        const text = (edu.degree + " " + (edu.fieldOfStudy || "")).toLowerCase();
+        if (/(?:^|\s)health\s*care|nurse|nursing|medical|clinical/i.test(dept)) {
+          return /nursing|bsn|msn|health|biology|science|medical|medicine/i.test(text);
+        }
+        if (/safety|ehs|hse|hazard|operations/i.test(dept)) {
+          return /safety|engineering|diploma|b\.e|b\.tech|fire|industrial|electrical|mechanical|environmental|science/i.test(text);
+        }
+        if (/finance|account/i.test(dept)) {
+          return /finance|accounting|business|economics|commerce|cpa|mba/i.test(text);
+        }
+        if (/marketing/i.test(dept)) {
+          return /marketing|communication|business|media|advertising|pr/i.test(text);
+        }
+        if (/education/i.test(dept)) {
+          return /education|teaching|instruction|curriculum|pedagogy|arts|science/i.test(text);
+        }
+        if (/engineering|technology/i.test(dept)) {
+          return /computer|software|engineering|technology|information|math|science/i.test(text);
+        }
+        return true;
+      });
+
+      educationScore = isAligned ? 100 : 85;
+    }
 
     // 5. Responsibilities alignment score
     const respMatches = matches.filter((m) => m.category === "responsibility");

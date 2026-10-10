@@ -1,4 +1,5 @@
 import React from "react";
+import { CheckCircle2, AlertTriangle, AlertCircle, Sparkles } from "lucide-react";
 
 interface ScoreGaugeProps {
   score: number;
@@ -13,62 +14,113 @@ export const ScoreGauge: React.FC<ScoreGaugeProps> = ({
   label = "ATS Match Score",
   showStatus = true
 }) => {
-  const getColor = (val: number) => {
-    if (val >= 80) return "text-emerald-600 bg-emerald-500 border-emerald-500 text-emerald-700";
-    if (val >= 65) return "text-amber-600 bg-amber-500 border-amber-500 text-amber-700";
-    return "text-rose-600 bg-rose-500 border-rose-500 text-rose-700";
-  };
+  const isLg = size === "lg";
+  const isSm = size === "sm";
+
+  const radius = isLg ? 48 : isSm ? 28 : 40;
+  const strokeWidth = isLg ? 10 : isSm ? 6 : 8;
+  const svgSize = isLg ? "w-36 h-36" : isSm ? "w-20 h-20" : "w-28 h-28";
+  const viewBoxSize = isLg ? 120 : isSm ? 70 : 100;
+  const center = viewBoxSize / 2;
+
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (Math.min(100, Math.max(0, score)) / 100) * circumference;
+
+  const isHigh = score >= 80;
+  const isMed = score >= 65 && score < 80;
+
+  const gradientId = `gauge-grad-${score >= 80 ? "emerald" : score >= 65 ? "amber" : "rose"}`;
 
   const getStatusText = (val: number) => {
-    if (val >= 80) return "Strong ATS Match";
-    if (val >= 65) return "Moderate Match (Action Needed)";
-    return "High Risk / Low Match";
+    if (val >= 90) return "Optimal Recruiter Match";
+    if (val >= 80) return "Strong ATS Alignment";
+    if (val >= 65) return "Moderate Match";
+    return "Action Needed";
   };
 
-  const circumference = 2 * Math.PI * 40;
-  const strokeDashoffset = circumference - (score / 100) * circumference;
+  const getStatusIcon = (val: number) => {
+    if (val >= 80) return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />;
+    if (val >= 65) return <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />;
+    return <AlertCircle className="w-3.5 h-3.5 text-rose-600" />;
+  };
 
   return (
-    <div className="flex flex-col items-center justify-center text-center">
+    <div className="flex flex-col items-center justify-center text-center select-none">
       <div className="relative flex items-center justify-center">
-        <svg className="w-28 h-28 transform -rotate-90" viewBox="0 0 100 100">
+        <svg className={`${svgSize} transform -rotate-90 filter drop-shadow-sm`} viewBox={`0 0 ${viewBoxSize} ${viewBoxSize}`}>
+          <defs>
+            <linearGradient id="gauge-grad-emerald" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#10b981" />
+              <stop offset="100%" stopColor="#059669" />
+            </linearGradient>
+            <linearGradient id="gauge-grad-amber" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#f59e0b" />
+              <stop offset="100%" stopColor="#d97706" />
+            </linearGradient>
+            <linearGradient id="gauge-grad-rose" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#f43f5e" />
+              <stop offset="100%" stopColor="#e11d48" />
+            </linearGradient>
+          </defs>
+
+          {/* Background track circle */}
           <circle
-            cx="50"
-            cy="50"
-            r="40"
+            cx={center}
+            cy={center}
+            r={radius}
             className="text-slate-100 stroke-current"
-            strokeWidth="9"
+            strokeWidth={strokeWidth}
             fill="transparent"
           />
+
+          {/* Value Progress Arc */}
           <circle
-            cx="50"
-            cy="50"
-            r="40"
-            className={`${score >= 80 ? "text-emerald-500" : score >= 65 ? "text-amber-500" : "text-rose-500"} stroke-current transition-all duration-1000 ease-out`}
-            strokeWidth="9"
+            cx={center}
+            cy={center}
+            r={radius}
+            stroke={`url(#${gradientId})`}
+            strokeWidth={strokeWidth}
             strokeDasharray={circumference}
             strokeDashoffset={strokeDashoffset}
             strokeLinecap="round"
             fill="transparent"
+            className="transition-all duration-1000 ease-out"
           />
         </svg>
-        <div className="absolute flex flex-col items-center">
-          <span className="text-3xl font-extrabold text-slate-800 tracking-tight">{score}%</span>
+
+        {/* Center Text */}
+        <div className="absolute flex flex-col items-center justify-center">
+          <div className="flex items-baseline space-x-0.5">
+            <span className={`${isLg ? "text-4xl" : isSm ? "text-xl" : "text-3xl"} font-black tracking-tight text-slate-900`}>
+              {score}
+            </span>
+            <span className={`${isLg ? "text-lg" : "text-xs"} font-bold text-slate-400`}>%</span>
+          </div>
+          {isLg && (
+            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 -mt-0.5">
+              ATS Match
+            </span>
+          )}
         </div>
       </div>
-      <p className="mt-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">{label}</p>
+
+      {!isLg && (
+        <p className="mt-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">{label}</p>
+      )}
+
       {showStatus && (
-        <span
-          className={`mt-1 text-xs px-2.5 py-0.5 rounded-full font-semibold ${
-            score >= 80
-              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-              : score >= 65
-              ? "bg-amber-50 text-amber-700 border border-amber-200"
-              : "bg-rose-50 text-rose-700 border border-rose-200"
+        <div
+          className={`mt-2 inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-bold border transition-all ${
+            isHigh
+              ? "bg-emerald-50 text-emerald-800 border-emerald-200/80 shadow-xs"
+              : isMed
+              ? "bg-amber-50 text-amber-800 border-amber-200/80 shadow-xs"
+              : "bg-rose-50 text-rose-800 border-rose-200/80 shadow-xs"
           }`}
         >
-          {getStatusText(score)}
-        </span>
+          {getStatusIcon(score)}
+          <span>{getStatusText(score)}</span>
+        </div>
       )}
     </div>
   );

@@ -49,7 +49,7 @@ app.get(["/health", "/api/health"], (req, res) => {
   res.json({ status: "healthy", timestamp: new Date().toISOString() });
 });
 
-app.get("/api", (req, res) => {
+app.get(["/api", "/api/status", "/"], (req, res) => {
   res.json({ message: "CareerFit AI API is running", version: "1.0.0" });
 });
 
@@ -83,8 +83,8 @@ app.use(async (req, res, next) => {
   }
 });
 
-// API Routes
-app.use("/api/v1", apiRoutes);
+// API Routes - support both /api/v1 and /v1 prefix
+app.use(["/api/v1", "/v1"], apiRoutes);
 
 // Error handling middleware
 app.use(errorHandler);

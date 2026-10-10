@@ -45,7 +45,7 @@ app.use("/api/", rateLimiter_1.apiLimiter);
 app.get(["/health", "/api/health"], (req, res) => {
     res.json({ status: "healthy", timestamp: new Date().toISOString() });
 });
-app.get("/api", (req, res) => {
+app.get(["/api", "/api/status", "/"], (req, res) => {
     res.json({ message: "CareerFit AI API is running", version: "1.0.0" });
 });
 // Direct Code Download endpoint
@@ -76,8 +76,8 @@ app.use(async (req, res, next) => {
         next(err);
     }
 });
-// API Routes
-app.use("/api/v1", api_1.default);
+// API Routes - support both /api/v1 and /v1 prefix
+app.use(["/api/v1", "/v1"], api_1.default);
 // Error handling middleware
 app.use(errorHandler_1.errorHandler);
 // Initialize database and start server (for local dev)

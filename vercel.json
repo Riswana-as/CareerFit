@@ -4,24 +4,37 @@
     "backend": {
       "root": "backend",
       "framework": "express",
+      "entrypoint": "index.js",
+      "installCommand": "npm install",
       "buildCommand": "npm run build"
     },
     "frontend": {
       "root": "frontend",
-      "framework": "vite"
+      "framework": "vite",
+      "installCommand": "npm install",
+      "buildCommand": "npm run build"
     }
   },
   "rewrites": [
     {
       "source": "/api/(.*)",
       "destination": {
-        "service": "backend"
+        "service": "backend",
+        "path": "/api/$1"
       }
     },
     {
       "source": "/api",
       "destination": {
-        "service": "backend"
+        "service": "backend",
+        "path": "/api"
+      }
+    },
+    {
+      "source": "/download-code",
+      "destination": {
+        "service": "backend",
+        "path": "/download-code"
       }
     },
     {

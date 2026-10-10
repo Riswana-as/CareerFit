@@ -1,5 +1,6 @@
 import path from "path";
 import fs from "fs";
+import os from "os";
 import { PGlite } from "@electric-sql/pglite";
 import { Pool } from "pg";
 
@@ -24,7 +25,9 @@ class DatabaseManager {
       await this.pgPool.query("SELECT 1");
       console.log("[DB] External PostgreSQL connected.");
     } else {
-      const dataDir = path.resolve(__dirname, "../../data/careerfit_pg");
+      const dataDir = process.env.VERCEL
+        ? path.join(os.tmpdir(), "careerfit_pg")
+        : path.resolve(__dirname, "../../data/careerfit_pg");
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
       }

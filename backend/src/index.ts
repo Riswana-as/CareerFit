@@ -18,7 +18,22 @@ const PORT = process.env.PORT || 5000;
 app.use(helmet());
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      const allowedOrigins = [
+        process.env.FRONTEND_URL,
+        "http://localhost:5173",
+        "http://localhost:3000"
+      ].filter(Boolean);
+      if (
+        allowedOrigins.includes(origin) ||
+        origin.endsWith(".vercel.app") ||
+        origin.startsWith("http://localhost:")
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "x-gemini-key"]
@@ -29,9 +44,13 @@ app.use(express.urlencoded({ extended: true, limit: "15mb" }));
 app.use(cookieParser());
 app.use("/api/", apiLimiter);
 
-// Health check
-app.get("/health", (req, res) => {
+// Health check & status endpoints
+app.get(["/health", "/api/health"], (req, res) => {
   res.json({ status: "healthy", timestamp: new Date().toISOString() });
+});
+
+app.get("/api", (req, res) => {
+  res.json({ message: "CareerFit AI API is running", version: "1.0.0" });
 });
 
 // Direct Code Download endpoint

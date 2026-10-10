@@ -25,6 +25,8 @@ export const LoginPage: React.FC = () => {
       const msg =
         typeof err.response?.data?.error === "string"
           ? err.response.data.error
+          : typeof err.response?.data?.error?.message === "string"
+          ? err.response.data.error.message
           : typeof err.response?.data?.message === "string"
           ? err.response.data.message
           : err.message || "Login failed. Check your credentials.";

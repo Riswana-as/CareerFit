@@ -119,6 +119,34 @@ export async function runMigrations(): Promise<void> {
     );
   }
 
+  // Seed default demo user if not present
+  try {
+    const existingDemo = await db.query("SELECT id FROM users WHERE email = $1", ["riswana@example.com"]);
+    if (existingDemo.rows.length === 0) {
+      console.log("[DB] Seeding default demo account (riswana@example.com)...");
+      const bcrypt = await import("bcryptjs");
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash("password123", salt);
+      const demoUserId = "84a85381-b1ae-4c7e-a8b5-1f40f6a02c6f";
+
+      await db.query(
+        "INSERT INTO users (id, email, password_hash, full_name, email_verified) VALUES ($1, $2, $3, $4, $5)",
+        [demoUserId, "riswana@example.com", passwordHash, "Riswana A S", true]
+      );
+      await db.query(
+        "INSERT INTO profiles (id, user_id, headline) VALUES ($1, $2, $3)",
+        [uuidv4(), demoUserId, "Software Professional"]
+      );
+      await db.query(
+        "INSERT INTO user_settings (id, user_id) VALUES ($1, $2)",
+        [uuidv4(), demoUserId]
+      );
+      console.log("[DB] Default demo account seeded.");
+    }
+  } catch (err: any) {
+    console.warn("[DB] Demo user seed warning:", err.message);
+  }
+
   hasMigrated = true;
   console.log("[DB] Migrations and templates verified successfully.");
 }

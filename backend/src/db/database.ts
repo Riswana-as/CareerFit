@@ -41,7 +41,9 @@ class DatabaseManager {
       this.useInMemory = true;
     } else {
       try {
-        const { PGlite } = await import("@electric-sql/pglite");
+        const modName = "@electric-sql/pglite";
+        const pglitePkg: any = await (eval(`import("${modName}")`));
+        const PGlite = pglitePkg.PGlite;
         const dataDir = path.resolve(__dirname, "../../data/careerfit_pg");
         if (!fs.existsSync(dataDir)) {
           fs.mkdirSync(dataDir, { recursive: true });

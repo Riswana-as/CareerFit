@@ -1,12 +1,7 @@
 {
   "name": "careerfit-ai",
-  "private": true,
   "version": "1.0.0",
   "description": "CareerFit AI — Personalized ATS Resume Builder with Zero-Fabrication Tailoring Engine",
-  "workspaces": [
-    "backend",
-    "frontend"
-  ],
   "scripts": {
     "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix frontend run dev",

@@ -75,7 +75,9 @@ class DatabaseManager {
         }
         else {
             try {
-                const { PGlite } = await Promise.resolve().then(() => __importStar(require("@electric-sql/pglite")));
+                const modName = "@electric-sql/pglite";
+                const pglitePkg = await (eval(`import("${modName}")`));
+                const PGlite = pglitePkg.PGlite;
                 const dataDir = path_1.default.resolve(__dirname, "../../data/careerfit_pg");
                 if (!fs_1.default.existsSync(dataDir)) {
                     fs_1.default.mkdirSync(dataDir, { recursive: true });
